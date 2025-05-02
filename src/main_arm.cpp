@@ -279,6 +279,27 @@ extern "C" uint8_t mpu_shared_rw_size;
 extern "C" uint8_t mpu_shared_rw_start;
 extern "C" uint8_t mpu_shared_rw_start_to_clean;
 
+extern "C" {
+  void* malloc(size_t size);
+  void free(void* ptr);
+}
+
+void* operator new(size_t size) {
+  return malloc(size);
+}
+
+void operator delete(void* ptr) noexcept {
+  free(ptr);
+}
+
+void* operator new[](size_t size) {
+  return malloc(size);
+}
+
+void operator delete[](void* ptr) noexcept {
+  free(ptr);
+}
+
 void jcvm_terminate() {
   while (1) {
   }
