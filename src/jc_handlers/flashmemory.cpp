@@ -33,6 +33,7 @@
 #include "../jc_types/jc_instance.hpp"
 #include "../jc_utils.hpp"
 #include "ffi.h"
+#include <vector>
 
 #include <cassert>
 
@@ -651,6 +652,120 @@ void FlashMemory_Handler::setPersistentField_Instance(
       throw Exceptions::SecurityException;
     }
   }
+}
+
+void FlashMemory_Handler::setPersistentField_Reference(const fs::Tag &tag,
+  const jref_t value,
+  Heap &heap) {
+if (value.isNullPointer()) {
+uint8_t data[1] = {static_cast<uint8_t>(FieldType::FIELD_TYPE_UNINITIALIZED)};
+FlashMemory_Handler::setDataFromTag(tag, 1, data);
+return;
+}
+
+if (value.isArray()) {
+auto array = heap.getArray(value);
+
+const uint16_t size = array->size();
+const jc_array_type type = array->getType();
+const bool isTransient = array->isTransientArray();
+const ClearEvent clearEvent = array->getClearEvent();
+const jc_cp_offset_t refType = array->getReferenceType();
+
+std::vector<uint8_t> data;
+
+switch (type) {
+case JAVA_ARRAY_T_BYTE:
+data = {
+static_cast<uint8_t>(isTransient ? FieldType::FIELD_TYPE_TRANSIENT_ARRAY_BYTE
+: FieldType::FIELD_TYPE_ARRAY_BYTE),
+static_cast<uint8_t>((size >> 0) & 0xFF),
+static_cast<uint8_t>((size >> 8) & 0xFF)
+};
+if (isTransient) {
+data.push_back(static_cast<uint8_t>(clearEvent));
+}
+break;
+
+case JAVA_ARRAY_T_BOOLEAN:
+data = {
+static_cast<uint8_t>(isTransient ? FieldType::FIELD_TYPE_TRANSIENT_ARRAY_BOOLEAN
+: FieldType::FIELD_TYPE_ARRAY_BOOLEAN),
+static_cast<uint8_t>((size >> 0) & 0xFF),
+static_cast<uint8_t>((size >> 8) & 0xFF)
+};
+if (isTransient) {
+data.push_back(static_cast<uint8_t>(clearEvent));
+}
+break;
+
+case JAVA_ARRAY_T_SHORT:
+data = {
+static_cast<uint8_t>(isTransient ? FieldType::FIELD_TYPE_TRANSIENT_ARRAY_SHORT
+: FieldType::FIELD_TYPE_ARRAY_SHORT),
+static_cast<uint8_t>((size >> 0) & 0xFF),
+static_cast<uint8_t>((size >> 8) & 0xFF)
+};
+if (isTransient) {
+data.push_back(static_cast<uint8_t>(clearEvent));
+}
+break;
+
+#ifdef JCVM_INT_SUPPORTED
+case JAVA_ARRAY_T_INT:
+data = {
+static_cast<uint8_t>(isTransient ? FieldType::FIELD_TYPE_TRANSIENT_ARRAY_INT
+: FieldType::FIELD_TYPE_ARRAY_INT),
+static_cast<uint8_t>((size >> 0) & 0xFF),
+static_cast<uint8_t>((size >> 8) & 0xFF)
+};
+if (isTransient) {
+data.push_back(static_cast<uint8_t>(clearEvent));
+}
+break;
+#endif
+
+case JAVA_ARRAY_T_REFERENCE:
+if (isTransient) {
+data = {
+static_cast<uint8_t>(FieldType::FIELD_TYPE_TRANSIENT_ARRAY_OBJECT),
+static_cast<uint8_t>((size >> 0) & 0xFF),
+static_cast<uint8_t>((size >> 8) & 0xFF),
+static_cast<uint8_t>(clearEvent),
+static_cast<uint8_t>((refType >> 0) & 0xFF),
+static_cast<uint8_t>((refType >> 8) & 0xFF)
+};
+} else {
+data = {
+static_cast<uint8_t>(FieldType::FIELD_TYPE_ARRAY_OBJECT),
+static_cast<uint8_t>((size >> 0) & 0xFF),
+static_cast<uint8_t>((size >> 8) & 0xFF),
+static_cast<uint8_t>((refType >> 0) & 0xFF),
+static_cast<uint8_t>((refType >> 8) & 0xFF)
+};
+}
+break;
+
+default:
+throw Exceptions::IOException;
+}
+
+FlashMemory_Handler::setDataFromTag(tag, data.size(), data.data());
+
+} else {
+auto instance = heap.getInstance(value);
+const jpackage_ID_t pkg = instance->getPackageID();
+const jclass_index_t clz = instance->getClassIndex();
+
+uint8_t data[4] = {
+static_cast<uint8_t>(FieldType::FIELD_TYPE_OBJECT),
+static_cast<uint8_t>(pkg),
+static_cast<uint8_t>((clz >> 0) & 0xFF),
+static_cast<uint8_t>((clz >> 8) & 0xFF)
+};
+
+FlashMemory_Handler::setDataFromTag(tag, sizeof(data), data);
+}
 }
 
 /**

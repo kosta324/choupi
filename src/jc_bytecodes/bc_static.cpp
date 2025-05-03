@@ -320,6 +320,9 @@ void Bytecodes::bc_putstatic_a() {
 
   Stack &stack = this->context.getStack();
   Static_Handler static_handler(context.getCurrentPackage());
+  ConstantPool_Handler cp(context.getCurrentPackage());
+  Heap &heap = this->context.getHeap();
+  
   pc_t &pc = stack.getPC();
 
   index = pc.getNextShort();
@@ -328,9 +331,35 @@ void Bytecodes::bc_putstatic_a() {
 
   value = stack.pop_Reference();
 
-  // TODO: TO IMPLEMENTS
-  // static_handler.setPersistentReference(index, value);
-  throw Exceptions::NotYetImplemented;
+  jc_cap_static_field_ref_info cp_entry = cp.getStaticFieldRefInfo(index);
+
+  jpackage_ID_t packageID;
+  uint8_t fieldNumber;
+
+  if (IS_CP_INTERNAL_REF(cp_entry.static_field_ref)) {
+    packageID = this->context.getCurrentPackageID();
+    fieldNumber = NTOHS(cp_entry.static_field_ref.internal_ref.offset);
+  } else {
+    jc_cap_external_ref external_ref = cp_entry.static_field_ref.external_ref;
+
+    Import_Handler imp(context.getCurrentPackage());
+    auto package_info =
+        imp.getPackageAID(CLEAR_BYTE_MSB(external_ref.package_token));
+    auto package_index = imp.getPackageIndex(package_info);
+
+    packageID = package_index;
+
+    auto export_comp = Package(package_index).getCap().getExport();
+    auto exported_class = export_comp->classexport(external_ref.class_token);
+    auto static_field_offsets = exported_class.static_field_offsets();
+    const uint16_t static_field_offset =
+        static_field_offsets[external_ref.token];
+    fieldNumber = static_field_offset;
+  }
+
+  fs::Tag tag = FlashMemory_Handler::getStaticFieldTag(packageID, fieldNumber);
+
+  FlashMemory_Handler::setPersistentField_Reference(tag, value, heap);
 
   return;
 }

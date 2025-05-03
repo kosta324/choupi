@@ -128,6 +128,8 @@ public:
   /// Get int data store in flash memory.
   static jref_t getPersistentField_Reference(const fs::Tag &tag, Heap &heap);
 
+  static void setPersistentField_Reference(const fs::Tag &tag, const jref_t value, Heap &heap);
+
   /// Get array data store value in flash memory at a specific index.
   static const jbyte_t getPersistentField_Array_Byte(const fs::Tag &tag,
                                                      const uint16_t index
