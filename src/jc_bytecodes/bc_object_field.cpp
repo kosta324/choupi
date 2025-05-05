@@ -28,6 +28,7 @@
 #include "../debug.hpp"
 #include "../heap.hpp"
 #include "../jc_handlers/flashmemory.hpp"
+#include "../jc_handlers/jc_cp.hpp"
 #include "../stack.hpp"
 #include "bytecodes.hpp"
 
@@ -382,6 +383,7 @@ void Bytecodes::bc_putfield_a() {
   jref_t value;
   Stack &stack = this->context.getStack();
   Heap &heap = this->context.getHeap();
+  ConstantPool_Handler cp(context.getCurrentPackage());
   pc_t &pc = stack.getPC();
 
   index = pc.getNextByte();
@@ -392,7 +394,31 @@ void Bytecodes::bc_putfield_a() {
   objectref = stack.pop_Reference();
 
   auto instance = heap.getInstance(objectref);
-  instance->setField_Reference(index, value);
+
+  //jc_cap_instance_field_ref_info field_ref = cp.getInstanceFieldRef(index); //TODO: figure out why field reference tokens are zeroed
+
+  uint8_t offset = 0;
+  uint16_t claz = 0;
+  Package pac = cp.getPackage();
+  JC_Cap cap = pac.getCap();
+  const jc_cap_constant_pool_component *c = cap.getConstantPool();
+  JCVMArray<const jc_cap_constant_pool_info> arr = c->constantpool();
+  const jc_cap_constant_pool_info entry = arr[index];
+
+  if (entry.tag == JC_CP_TAG_CONSTANT_INSTANCEFIELDREF) {
+    const jc_cap_instance_field_ref_info f_ref= entry.info.instance_field_ref_info;
+    claz = HTONS(f_ref.class_ref.internal_classref);
+  }
+
+  for (int i = index - 1; i >= 0; i--) {
+    const jc_cap_constant_pool_info ent = arr[i];
+    if (ent.tag == JC_CP_TAG_CONSTANT_INSTANCEFIELDREF) {
+      const jc_cap_instance_field_ref_info ref= ent.info.instance_field_ref_info;
+      if (claz == HTONS(ref.class_ref.internal_classref)) offset++;
+    }
+  }
+
+  instance->setField_Reference(offset/*field_ref.token*/, value);
 
   return;
 }
