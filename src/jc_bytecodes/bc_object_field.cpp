@@ -34,6 +34,31 @@
 
 namespace jcvm {
 
+static uint8_t computeFieldOffset(ConstantPool_Handler &cp, uint8_t index) {
+  uint8_t offset = 0;
+  uint16_t claz = 0;
+  Package pac = cp.getPackage();
+  JC_Cap cap = pac.getCap();
+  const jc_cap_constant_pool_component *c = cap.getConstantPool();
+  JCVMArray<const jc_cap_constant_pool_info> arr = c->constantpool();
+  const jc_cap_constant_pool_info entry = arr[index];
+
+  if (entry.tag == JC_CP_TAG_CONSTANT_INSTANCEFIELDREF) {
+    const jc_cap_instance_field_ref_info f_ref= entry.info.instance_field_ref_info;
+    claz = HTONS(f_ref.class_ref.internal_classref);
+  }
+
+  for (int i = index - 1; i >= 0; i--) {
+    const jc_cap_constant_pool_info ent = arr[i];
+    if (ent.tag == JC_CP_TAG_CONSTANT_INSTANCEFIELDREF) {
+      const jc_cap_instance_field_ref_info ref= ent.info.instance_field_ref_info;
+      if (claz == HTONS(ref.class_ref.internal_classref)) offset++;
+    }
+  }
+
+  return offset;
+}
+
 /**
  * Fetch reference from object
  *
@@ -397,26 +422,7 @@ void Bytecodes::bc_putfield_a() {
 
   //jc_cap_instance_field_ref_info field_ref = cp.getInstanceFieldRef(index); //TODO: figure out why field reference tokens are zeroed
 
-  uint8_t offset = 0;
-  uint16_t claz = 0;
-  Package pac = cp.getPackage();
-  JC_Cap cap = pac.getCap();
-  const jc_cap_constant_pool_component *c = cap.getConstantPool();
-  JCVMArray<const jc_cap_constant_pool_info> arr = c->constantpool();
-  const jc_cap_constant_pool_info entry = arr[index];
-
-  if (entry.tag == JC_CP_TAG_CONSTANT_INSTANCEFIELDREF) {
-    const jc_cap_instance_field_ref_info f_ref= entry.info.instance_field_ref_info;
-    claz = HTONS(f_ref.class_ref.internal_classref);
-  }
-
-  for (int i = index - 1; i >= 0; i--) {
-    const jc_cap_constant_pool_info ent = arr[i];
-    if (ent.tag == JC_CP_TAG_CONSTANT_INSTANCEFIELDREF) {
-      const jc_cap_instance_field_ref_info ref= ent.info.instance_field_ref_info;
-      if (claz == HTONS(ref.class_ref.internal_classref)) offset++;
-    }
-  }
+  uint8_t offset = computeFieldOffset(cp, index);
 
   instance->setField_Reference(offset/*field_ref.token*/, value);
 
@@ -1048,6 +1054,7 @@ void Bytecodes::bc_getfield_a_this() {
   jref_t ref;
   Stack &stack = this->context.getStack();
   Heap &heap = this->context.getHeap();
+  ConstantPool_Handler cp(context.getCurrentPackage());
   pc_t &pc = stack.getPC();
 
   index = pc.getNextByte();
@@ -1061,7 +1068,12 @@ void Bytecodes::bc_getfield_a_this() {
    */
   objectref = stack.readLocal_Reference(0);
   auto instance = heap.getInstance(objectref);
-  ref = instance->getField_Reference(index);
+
+  //jc_cap_instance_field_ref_info field_ref = cp.getInstanceFieldRef(index); //TODO: figure out why field reference tokens are zeroed
+
+  uint8_t offset = computeFieldOffset(cp, index);
+  
+  ref = instance->getField_Reference(offset/*field_ref.token*/);
   stack.push_Reference(ref);
 
   return;
