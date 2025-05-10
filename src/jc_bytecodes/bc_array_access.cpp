@@ -28,6 +28,7 @@
 #include "../debug.hpp"
 #include "../heap.hpp"
 #include "../jc_handlers/flashmemory.hpp"
+#include "../jc_handlers/jc_cp.hpp"
 #include "../jc_types/jc_array.hpp"
 #include "../jc_types/jc_array_type.hpp"
 #include "../stack.hpp"
@@ -287,6 +288,13 @@ void Bytecodes::bc_aaload() {
 
   auto array = heap.getArray(arrayref);
   jref_t ref = array->getReferenceEntry(index);
+  if (ref.isNullPointer()) {
+    jc_cp_offset_t reference_type = array->getReferenceType();
+    ConstantPool_Handler cp(context.getCurrentPackage());
+    auto instantiated_class = cp.getClassInformation(reference_type);
+    ref = heap.addInstance(instantiated_class.first, instantiated_class.second);
+    array->setReferenceEntry(index, ref, context);
+  }
   stack.push_Reference(ref);
 
   return;
