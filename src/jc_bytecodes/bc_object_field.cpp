@@ -491,6 +491,7 @@ void Bytecodes::bc_putfield_b() {
   jbyte_t value;
   Stack &stack = this->context.getStack();
   Heap &heap = this->context.getHeap();
+  ConstantPool_Handler cp(context.getCurrentPackage());
   pc_t &pc = stack.getPC();
 
   index = pc.getNextByte();
@@ -501,7 +502,12 @@ void Bytecodes::bc_putfield_b() {
   objectref = stack.pop_Reference();
 
   auto instance = heap.getInstance(objectref);
-  instance->setField_Byte(index, value);
+
+  //jc_cap_instance_field_ref_info field_ref = cp.getInstanceFieldRef(index); //TODO: figure out why field reference tokens are zeroed
+
+  uint8_t offset = computeFieldOffset(cp, index);
+
+  instance->setField_Byte(offset/*field_ref.token*/, value);
 
   return;
 }
